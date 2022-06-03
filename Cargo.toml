@@ -9,11 +9,11 @@ edition = "2021"
 
 libm = "0.2.2"
 aes-gcm = "0.10.0-pre"
+libloading = "0.7"
 # openssl = "0.10.40"
 # aead = "0.4.3"
 # aes = "0.8.1"
 
-
 # common_math = "0.3.0"
 # half = "1.8.2"
-# winapi = { version = "0.3.9", features = ["libloaderapi"] }
+#winapi = { version = "0.3.9", features = ["libloaderapi"] }

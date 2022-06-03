@@ -349,21 +349,31 @@ fn extract_files(package: structs::Package)
     println!("Extracted all wem files.");
 }
 
+//fn decompress_block() -> Result<u32, Box<dyn std::error::Error>> { 
+//}
+
+
 #[allow(non_snake_case)]
-//#[link(name = "oo2core_9_win64.dll", kind = "static")]
-extern {
-    fn OodleLZ_Decompress(compressed_bytes:&Vec<u8>, size_of_compressed_bytes:i64, decompressed_bytes:&Vec<u8>, size_of_decompressed_bytes:i64, a:i64, b:i64, c:i64, d:i64, e:i64, f:i64, g:i64, h:i64, i:i64, threadModule:i64) -> i64;
-}
-
-
 fn decompress_block(block: &structs::Block, decrypt_buffer: &Vec<u8>) -> Vec<u8>
 {
-    let mut decomp_buffer: Vec<u8> = vec![0u8; 262144];
-    let mut result:i64 = 0;
     unsafe {
-        result = OodleLZ_Decompress(&decrypt_buffer, block.size as i64, &decomp_buffer, BLOCK_SIZE as i64, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3);
+        let lib = libloading::Library::new("oo2core_9_win64.dll").expect("Failed to load Oodle.");
+        let OodleLZ_Decompress: libloading::Symbol<extern "C" fn(compressed_bytes:Vec<u8>, size_of_compressed_bytes:i64,
+            decompressed_bytes: *mut Vec<u8>, size_of_decompressed_bytes:i64,
+            a:u32, b:u32, c:u32, d:u32, e:u32, f:u32, g:u32, h:u32, i:u32, threadModule:u32) -> i64>
+        = lib.get(b"OodleLZ_Decompress").expect("Failed to load OodleLZ_Decompress funtion.");
+
+        //let decomp = OodleLZ_Decompress();
+        //let symbol = symbol.into_raw();
+        //Ok(OodleLZ_Decompress());
+        let mut decomp_buffer: Vec<u8> = vec![0u8; BLOCK_SIZE as usize];
+        let result:i64 = OodleLZ_Decompress(decrypt_buffer.to_vec(), block.size as i64, &mut decomp_buffer, BLOCK_SIZE as i64, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3);
+        println!("Oodle Result: {}", result);
+        println!("{:x?}", decomp_buffer);
+        std::thread::sleep(std::time::Duration::from_millis(10000));
+        //result = OodleLZ_Decompress(&decrypt_buffer, block.size as i64, &decomp_buffer, BLOCK_SIZE as i64, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3);
+        return decomp_buffer;
     }
-    return decomp_buffer;
 }
 
 
