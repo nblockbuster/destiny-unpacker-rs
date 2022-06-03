@@ -1,13 +1,18 @@
 [package]
-name = "DestinyUnpackerRS"
+name = "destiny-unpacker-rs"
 version = "0.1.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-openssl = "0.10.40"
-libm = "0.2.2"
+
+# not needed yet
+
+# openssl = "0.10.40"
+# libm = "0.2.2"
+
+# also not needed yet
 
 # aes = "0.8.1"
 # common_math = "0.3.0"
