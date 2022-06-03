@@ -16,8 +16,10 @@ const BLOCK_SIZE: u32 = 262144;
 
 fn main()
 {
+    //i couldve used a crate for this!
+
     let args: Vec<String> = env::args().collect();
-    println!("{:?}", args);
+    //println!("{:?}", args);
     if args.len() < 2 {
         println!("Usage: {} -p [Packages Path] -i [Package Id]", args[0]);
         return;
@@ -25,7 +27,7 @@ fn main()
     let package_check = &args[1];
     if package_check == "-p" && args.len() >= 3 {
         println!("Packages Path: {}", args[2]);
-    } else{
+    } else {
         println!("Usage: {} -p [Packages Path] -i [Package Id]", args[0]);
         return
     }
@@ -34,7 +36,7 @@ fn main()
 
     if id_check == "-i" && args.len() >= 5 {
         println!("Package Id: {}", args[4]);
-    } else{
+    } else {
         println!("Usage: {} -p [Packages Path] -i [Package Id]", args[0]);
         return
     }
@@ -138,7 +140,7 @@ pub fn read_entry_table(mut package: structs::Package) -> structs::Package
         file.read(&mut u32buffer).expect("Error reading file");
         entryd = le_u32(&u32buffer);
 
-        entry.filesize = (entryd & 0xF0FFFF3F) << 4 | (entryc >> 28) & 0xF;
+        entry.filesize = (entryd & 0x03FFFFFF) << 4 | (entryc >> 28) & 0xF;
 
         package.entries.push(entry);
     }
@@ -186,23 +188,19 @@ fn modify_nonce(mut package: structs::Package) -> structs::Package
     return package;
 }
 
-fn byte_copy(from: &[u8], mut to: &mut [u8]) -> usize {
-    to.write(&from).unwrap()
-}
-
 fn extract_files(package: structs::Package)
 {
     let mut pkg_patch_stream_paths: Vec<String> = Vec::new();
     let output_path = format!("output/{}", package.package_id);
     fs::create_dir_all(output_path.clone()).expect("Error creating directory");
-    for i in 0..package.header.patchid
+    for i in 0..=package.header.patchid
     {
         let a = i as u8 + 48;
         let pkg_patch_path = package.package_path.clone();
         let mut b:String = pkg_patch_path.to_string();
         b.remove(b.len()-5);
         b.insert(pkg_patch_path.len()-5, a as char);
-        //println!("Buh! {}", b);
+        println!("Buh {} @ {}", i, b);
         pkg_patch_stream_paths.push(b.to_string());
     }
     println!("Package has {} entries.", package.entries.len());
@@ -240,14 +238,14 @@ fn extract_files(package: structs::Package)
             {
                 println!("Error reading file");
             }
-            let mut decrypt_buffer = vec![0u8; current_block.size as usize];
-            let mut decomp_buffer = vec![0u8; BLOCK_SIZE as usize];
+            let mut decrypt_buffer:Vec<u8> = vec![0u8; current_block.size as usize];
+            let mut decomp_buffer:Vec<u8> = vec![0u8; BLOCK_SIZE as usize];
             println!("Decrypt Check: {}", current_block.bitflag & 2);
             if current_block.bitflag & 0x2 != 0
             {
                 //decrypt_buffer = block_buffer;
                 println!("Block is encrypted.");
-                //decrypt_buffer = decrypt_block(&package, &current_block, &block_buffer)
+                //decrypt_buffer = decrypt_block(&package, &current_block, &block_buffer);
                 break;
             }
             else
@@ -268,56 +266,53 @@ fn extract_files(package: structs::Package)
             }
             if cur_block_id == entry.startingblock
             {
-                println!("Start block");
+                //println!("Start block");
                 let mut _cpy_size = 0;
 
                 if cur_block_id == last_block_id
                 {
                     _cpy_size = entry.filesize;
-                    println!("Start block is last block. Cpy size: {}", _cpy_size);
+                    //println!("Start block is last block. Cpy size: {}", _cpy_size);
                 }
                 else
                 {
                     _cpy_size = BLOCK_SIZE - entry.startingblockoffset;
-                    println!("Start block not last block. Cpy size: {}", _cpy_size);
+                    //println!("Start block not last block. Cpy size: {}, Last Block: {}", _cpy_size, last_block_id);
                 }
-                println!("Copying from starting offset {} to end offset {}", entry.startingblockoffset, entry.startingblockoffset + _cpy_size);
-                file_buffer.copy_from_slice(&decomp_buffer[entry.startingblockoffset as usize..entry.startingblockoffset as usize + _cpy_size as usize]);
+                //println!("Copying from starting offset {} to end offset {}", entry.startingblockoffset, entry.startingblockoffset + _cpy_size);
+                file_buffer[0.._cpy_size as usize].copy_from_slice(&decomp_buffer[entry.startingblockoffset as usize..entry.startingblockoffset as usize + _cpy_size as usize]);
 
-                //file_buffer.copy_from_slice(&decomp_buffer[entry.startingblockoffset as usize.._cpy_size as usize]);
-                //unsafe {
-                    //file_buffer.copy_nonoverlapping(&decomp_buffer[entry.startingblockoffset as usize.._cpy_size as usize]);
-                    //let dst_ptr = &mut file_buffer[current_buffer_offset] as *mut u8;
-                    //let src_ptr = &decomp_buffer[entry.startingblockoffset as usize] as *const u8;
-                    //std::ptr::copy_nonoverlapping(src_ptr, dst_ptr, _cpy_size as usize)
-                //}
-                //byte_copy(&decomp_buffer[entry.startingblockoffset as usize.._cpy_size as usize], &mut file_buffer[current_buffer_offset..]);
                 current_buffer_offset += _cpy_size as usize;
-                //println!("{:?}", file_buffer);
-                println!("{} copied.\nFinish Start block", _cpy_size);
-                std::thread::sleep(std::time::Duration::from_millis(1000));
+                //println!("{} copied.\nFinish Start block", _cpy_size);
+                //std::thread::sleep(std::time::Duration::from_millis(1000));
             }
             else if cur_block_id == last_block_id
             {
-                println!("Last block");
-                file_buffer[current_buffer_offset as usize..].copy_from_slice(&decomp_buffer[0..entry.filesize as usize]);
-                println!("Finish Last block");
+                //println!("Last block. Current buffer offset: {}", current_buffer_offset);
+                file_buffer[current_buffer_offset as usize..]
+                .copy_from_slice(&decomp_buffer[..(entry.filesize - current_buffer_offset as u32) as usize]);
+                //println!("Finish Last block");
             }
             else
             {
-                println!("Mid block");
+                //println!("Mid block");
                 //Copy amount BLOCK_SIZE from decomp_buffer to file_buffer at offset current_buffer_offset
                 file_buffer[current_buffer_offset as usize..(current_buffer_offset + BLOCK_SIZE as usize) as usize].copy_from_slice(&decomp_buffer[0..BLOCK_SIZE as usize]);
                 current_buffer_offset += BLOCK_SIZE as usize;
-                println!("Finish Mid block");
+                //println!("Finish Mid block. Current Buffer Offset: {}", current_buffer_offset);
             }
             file.flush().expect("Error flushing file");
             cur_block_id +=1;
-            println!("blockid+=1 =: {}", cur_block_id);
+            //println!("blockid+=1 =: {}", cur_block_id);
             decomp_buffer.clear();
         }
-        println!("{}", format!("{}/{}-{:04x}.bin", output_path, package.package_id, i));
-        let name = format!("{}/{}-{:04x}.bin", output_path, package.package_id, i);
+        //println!("{}", format!("{}/{}-{:04x}.bin", output_path, package.package_id, i));
+        //let name = format!("{}/{}-{:04x}.wem", output_path, package.package_id, i);
+        if le_u32(&file_buffer[0..4]) == 0
+        {
+            continue;
+        }
+        let name = format!("{}/{}.wem", output_path, entry.reference);
         let mut output_file = File::create(&name).expect("Error creating file");
         output_file.write(&file_buffer).expect("Error writing file");
         //close file
@@ -325,7 +320,7 @@ fn extract_files(package: structs::Package)
         output_file.sync_all().expect("Error syncing file");
         file_buffer.clear();
         println!("Extracted to {}", &name);
-        std::thread::sleep(std::time::Duration::from_millis(10000));
+        //std::thread::sleep(std::time::Duration::from_millis(500));
     }
 }
 
@@ -362,16 +357,18 @@ fn decrypt_block(package: &structs::Package, block: &structs::Block, block_buffe
     package_nonce[0] ^= (package.header.pkgid >> 8) as u8 & 0xFF;
     package_nonce[1] ^= 38;
     package_nonce[11] ^= package.header.pkgid as u8 & 0xFF;
-
-    let mut decrypt_buffer = vec![0u8; block.size as usize];
+    //let mut decrypt_buffer = vec![0u8; block.size as usize];
     let alt_key = &block.bitflag & 4 != 0;
-    let mut key;
+    println!("Block alt key check: {}", &block.bitflag & 4);
+    let key;
     if alt_key
     {
+        println!("Block uses alt key.");
         key = Key::from_slice(&package.aes_alt_key);
     }
     else
     {
+        println!("Block uses normal key.");
         key = Key::from_slice(&package.aes_key);
     }
     let nonce = Nonce::from_slice(&package_nonce);
@@ -380,6 +377,6 @@ fn decrypt_block(package: &structs::Package, block: &structs::Block, block_buffe
 
    let mut buffer: Vec<u8> = Vec::new();
    buffer.extend_from_slice(block_buffer);
-   cipher.decrypt_in_place_detached(nonce, &mut decrypt_buffer, &mut buffer, tag).expect("Decrypt Failed!");
-   return decrypt_buffer;
+   cipher.decrypt_in_place_detached(nonce, b"", &mut buffer, tag).expect("Decrypt Failed!");
+   return buffer;
 }
