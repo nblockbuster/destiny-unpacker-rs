@@ -9,10 +9,10 @@ edition = "2021"
 
 libm = "0.2.2"
 aes-gcm = "0.9.4"
+openssl = "0.10.40"
 
 # not needed yet
 
-# openssl = "0.10.40"
 # aes = "0.8.1"
 # common_math = "0.3.0"
 # half = "1.8.2"

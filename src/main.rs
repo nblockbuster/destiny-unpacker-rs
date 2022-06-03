@@ -5,11 +5,11 @@ use std::fs::File;
 use std::io::SeekFrom;
 use std::io::prelude::*;
 use std::io::Write;
-use aes_gcm::{Aes128Gcm, Key, Nonce, Tag};
-use aes_gcm::aead::{AeadInPlace, NewAead};
+use openssl::symm::{decrypt_aead, Cipher, Crypter, Mode};
+//use aes_gcm::{Aes128Gcm, Key, Nonce, Tag};
+//use aes_gcm::aead::{AeadInPlace, NewAead, Aead, Buffer};
 
 
-//use openssl::symm::{decrypt, Cipher};
 //use common_math::rounding::*;
 //use libm::floorf;
 const BLOCK_SIZE: u32 = 262144;
@@ -203,19 +203,19 @@ fn extract_files(package: structs::Package)
         println!("Buh {} @ {}", i, b);
         pkg_patch_stream_paths.push(b.to_string());
     }
-    println!("Package has {} entries.", package.entries.len());
+    //println!("Package has {} entries.", package.entries.len());
     //println!("Entry Reference: {}, File Size: {}", &package.entries[1].reference, &package.entries[1].filesize);
     for i in 0..package.entries.len()
     {
         let entry = &package.entries[i];
         println!("Entry Reference: {}, File Size: {}", &entry.reference, &entry.filesize);
-        if entry.numtype != 26 && entry.numsubtype != 7
+        if entry.numtype != 26
         {
-            println!("Entry is not 26/7 (wem). Skipping");
+            println!("Entry is not 26 (wem/bnk). Skipping");
             continue;
         }
         let mut cur_block_id = entry.startingblock;
-        println!("curblockid: {}, starting blockoffset: {} ", cur_block_id, entry.startingblockoffset);
+        //println!("curblockid: {}, starting blockoffset: {} ", cur_block_id, entry.startingblockoffset);
         let mut block_count:u32 = libm::floorf((entry.startingblockoffset as f32 + entry.filesize as f32 - 1.0_f32) / BLOCK_SIZE as f32) as u32;
         if entry.filesize == 0
         {
@@ -226,11 +226,9 @@ fn extract_files(package: structs::Package)
         let mut current_buffer_offset = 0;
         while cur_block_id <= last_block_id
         {
-            //println!("curblockid: {}", cur_block_id);
             let current_block = &package.blocks[cur_block_id as usize];
-            println!("Offset: {}\nSize: {}\nPatchID: {}", &current_block.offset, &current_block.size, &current_block.patchid);
             let mut file = File::open(&pkg_patch_stream_paths[current_block.patchid as usize]).expect("Error reading file");
-            println!("seek to {} in file {}", current_block.offset, pkg_patch_stream_paths[current_block.patchid as usize]);
+            //println!("seek to {} in file {}", current_block.offset, pkg_patch_stream_paths[current_block.patchid as usize]);
             file.seek(SeekFrom::Start(current_block.offset as u64)).expect("Error seeking");
             let mut block_buffer = vec![0; current_block.size as usize];
             let result = file.read(&mut block_buffer).expect("Error reading file");
@@ -240,12 +238,12 @@ fn extract_files(package: structs::Package)
             }
             let mut decrypt_buffer:Vec<u8> = vec![0u8; current_block.size as usize];
             let mut decomp_buffer:Vec<u8> = vec![0u8; BLOCK_SIZE as usize];
-            println!("Decrypt Check: {}", current_block.bitflag & 2);
+            //println!("Decrypt Check: {}", current_block.bitflag & 2);
             if current_block.bitflag & 0x2 != 0
             {
                 //decrypt_buffer = block_buffer;
                 println!("Block is encrypted.");
-                //decrypt_buffer = decrypt_block(&package, &current_block, &block_buffer);
+                decrypt_buffer = decrypt_block(&package, &current_block, &block_buffer);
                 break;
             }
             else
@@ -253,7 +251,7 @@ fn extract_files(package: structs::Package)
                 
                 decrypt_buffer = block_buffer
             }
-            println!("Decomp Check: {}", current_block.bitflag & 1);
+            //println!("Decomp Check: {}", current_block.bitflag & 1);
             if current_block.bitflag & 0x1 != 0
             {
                 //decomp_buffer = decrypt_buffer;
@@ -312,7 +310,16 @@ fn extract_files(package: structs::Package)
         {
             continue;
         }
-        let name = format!("{}/{}.wem", output_path, entry.reference);
+        let mut cus_out:String = output_path.clone();
+        let mut ext = "wem";
+        let mut file_name = entry.reference.to_uppercase();
+        if entry.numsubtype == 6
+        {
+            ext = "bnk";
+            cus_out.push_str("/bnk"); 
+            file_name = format!("{}-{:04x}", package.package_id, i);
+        }
+        let name = format!("{}/{}.{}", &cus_out, file_name, ext);
         let mut output_file = File::create(&name).expect("Error creating file");
         output_file.write(&file_buffer).expect("Error writing file");
         //close file
@@ -320,8 +327,9 @@ fn extract_files(package: structs::Package)
         output_file.sync_all().expect("Error syncing file");
         file_buffer.clear();
         println!("Extracted to {}", &name);
-        //std::thread::sleep(std::time::Duration::from_millis(500));
+        std::thread::sleep(std::time::Duration::from_millis(500));
     }
+    println!("Extracted all wem files.");
 }
 
 /*
@@ -357,26 +365,41 @@ fn decrypt_block(package: &structs::Package, block: &structs::Block, block_buffe
     package_nonce[0] ^= (package.header.pkgid >> 8) as u8 & 0xFF;
     package_nonce[1] ^= 38;
     package_nonce[11] ^= package.header.pkgid as u8 & 0xFF;
-    //let mut decrypt_buffer = vec![0u8; block.size as usize];
+    let mut decrypt_buffer:Vec<u8> = vec![0u8; block.size as usize];
     let alt_key = &block.bitflag & 4 != 0;
     println!("Block alt key check: {}", &block.bitflag & 4);
     let key;
     if alt_key
     {
         println!("Block uses alt key.");
-        key = Key::from_slice(&package.aes_alt_key);
+        key = &package.aes_alt_key;
     }
     else
     {
         println!("Block uses normal key.");
-        key = Key::from_slice(&package.aes_key);
+        key = &package.aes_key;
     }
-    let nonce = Nonce::from_slice(&package_nonce);
-    let tag = Tag::from_slice(&block.gcmtag);
-    let cipher = Aes128Gcm::new(key);
+    let mut decrypter = Crypter::new(
+        Cipher::aes_128_gcm(),
+        Mode::Decrypt,
+        key,
+        Some(&package_nonce)
+    ).unwrap();
+    decrypter.set_tag(&block.gcmtag).expect("Failed setting GCM Tag.");
+    let mut count = decrypter.update(block_buffer, &mut decrypt_buffer).expect("Decrypt failed updating!");
+    count += decrypter.finalize(&mut decrypt_buffer[count..]).expect("Decrypt failed finalizing!");
+    println!("Decrypted count: {}", count);
+    //let nonce = Nonce::from_slice(&package_nonce);
+    //let tag = Tag::from_slice(&block.gcmtag);
+    //let cipher = Aes128Gcm::new(key);
 
-   let mut buffer: Vec<u8> = Vec::new();
-   buffer.extend_from_slice(block_buffer);
-   cipher.decrypt_in_place_detached(nonce, b"", &mut buffer, tag).expect("Decrypt Failed!");
-   return buffer;
+    //let cipher = Cipher::aes_128_gcm();
+    //let decrypt_2 = decrypt_aead(cipher, key, Some(&package_nonce), b"", &block_buffer, &block.gcmtag).expect("Decrypt Failed!");
+
+   //let mut buffer: Vec<u8> = Vec::new();
+   //buffer.extend_from_slice(block_buffer);
+   //cipher.decrypt_in_place_detached(nonce, b"", &mut buffer, tag).expect("Decrypt Failed!");
+   //decrypt_buffer = cipher.decrypt(&nonce, &**block_buffer).expect("Decrypt Failed!");
+   //cipher.decrypt_in_place(nonce, &[0u8], buffer)
+   return decrypt_buffer;
 }
