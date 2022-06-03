@@ -5,9 +5,11 @@ use std::fs::File;
 use std::io::SeekFrom;
 use std::io::prelude::*;
 use std::io::Write;
-use openssl::symm::{decrypt_aead, Cipher, Crypter, Mode};
-//use aes_gcm::{Aes128Gcm, Key, Nonce, Tag};
-//use aes_gcm::aead::{AeadInPlace, NewAead, Aead, Buffer};
+//use openssl::symm::{decrypt_aead, Cipher, Crypter, Mode};
+//use aead::{Aead, AeadCore, AeadInPlace};
+use aes_gcm::{Aes128Gcm, Key, Nonce, Tag};
+use aes_gcm::aead::{AeadInPlace, NewAead};
+//use aes_gcm::aead::heapless::Vec;
 
 
 //use common_math::rounding::*;
@@ -16,6 +18,20 @@ const BLOCK_SIZE: u32 = 262144;
 
 fn main()
 {
+    /*
+    let main_aes_key = [0xD6, 0x2A, 0xB2, 0xC1, 0x0C, 0xC0, 0x1B, 0xC5, 0x35, 0xDB, 0x7B, 0x86, 0x55, 0xC7, 0xDC, 0x3B];
+    let aes_key = Key::<Aes128Gcm>::from_slice(&main_aes_key);
+    let nonce = Nonce::from_slice(b"unique nonce");
+    let cipher = Aes128Gcm::new(aes_key);
+    let mut buffer: Vec<u8> = Vec::new();
+    buffer.extend_from_slice(b"plaintext message");
+    cipher.encrypt_in_place(nonce, b"", &mut buffer).expect("encryption failure!");
+    println!("{:x?}", buffer);
+    cipher.decrypt_in_place(nonce, b"", &mut buffer).expect("Decrypt Failed!");
+    println!("{:x?}", buffer);
+    return;
+    */
+
     //i couldve used a crate for this!
 
     let args: Vec<String> = env::args().collect();
@@ -208,10 +224,10 @@ fn extract_files(package: structs::Package)
     for i in 0..package.entries.len()
     {
         let entry = &package.entries[i];
-        println!("Entry Reference: {}, File Size: {}", &entry.reference, &entry.filesize);
+        //println!("Entry Reference: {}, File Size: {}", &entry.reference, &entry.filesize);
         if entry.numtype != 26
         {
-            println!("Entry is not 26 (wem/bnk). Skipping");
+            //println!("Entry is not 26 (wem/bnk). Skipping");
             continue;
         }
         let mut cur_block_id = entry.startingblock;
@@ -244,7 +260,7 @@ fn extract_files(package: structs::Package)
                 //decrypt_buffer = block_buffer;
                 println!("Block is encrypted.");
                 decrypt_buffer = decrypt_block(&package, &current_block, &block_buffer);
-                break;
+                //break;
             }
             else
             {
@@ -255,8 +271,9 @@ fn extract_files(package: structs::Package)
             if current_block.bitflag & 0x1 != 0
             {
                 //decomp_buffer = decrypt_buffer;
-                println!("Block is compressed. Skipping?");
-                break;
+                println!("Block is compressed.");
+                decomp_buffer = decompress_block(&current_block, &decrypt_buffer);
+                //break;
             }
             else
             {
@@ -332,34 +349,27 @@ fn extract_files(package: structs::Package)
     println!("Extracted all wem files.");
 }
 
-/*
+#[allow(non_snake_case)]
+//#[link(name = "oo2core_9_win64.dll", kind = "static")]
+extern {
+    fn OodleLZ_Decompress(compressed_bytes:&Vec<u8>, size_of_compressed_bytes:i64, decompressed_bytes:&Vec<u8>, size_of_decompressed_bytes:i64, a:i64, b:i64, c:i64, d:i64, e:i64, f:i64, g:i64, h:i64, i:i64, threadModule:i64) -> i64;
+}
 
-fn init_oodle() -> i64
+
+fn decompress_block(block: &structs::Block, decrypt_buffer: &Vec<u8>) -> Vec<u8>
 {
-    unsafe{
-        let lib = winapi::um::libloaderapi::LoadLibraryA(b"oo2core_9_win64.dll".as_ptr() as *const i8);
-        let func = winapi::um::libloaderapi::GetProcAddress(lib, b"OodleLZ_Decompress".as_ptr() as *const i8) as i64;
-        if func == 0
-        {
-            println!("Error loading OodleLZ_Decompress");
-        }
-        return func;
+    let mut decomp_buffer: Vec<u8> = vec![0u8; 262144];
+    let mut result:i64 = 0;
+    unsafe {
+        result = OodleLZ_Decompress(&decrypt_buffer, block.size as i64, &decomp_buffer, BLOCK_SIZE as i64, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3);
     }
+    return decomp_buffer;
 }
-
-fn decomp_block(block: &structs::Block, decrypt_buffer: &Vec<u8>, decomp_buffer: &mut Vec<u8>)
-{
-    let result:i64 = 0;
-    let oodle_decomp = init_oodle();
-    result = oodle_decomp(decrypt_buffer, block.size, decomp_buffer, BLOCK_SIZE, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3);
-}
-
-*/
 
 
 fn decrypt_block(package: &structs::Package, block: &structs::Block, block_buffer: &Vec<u8>) -> Vec<u8>
 {
-    let mut package_nonce = vec![0u8; package.nonce.len()];
+    let mut package_nonce:Vec<u8> = vec![0u8; 12];
     package_nonce.copy_from_slice(&package.nonce);
 
     package_nonce[0] ^= (package.header.pkgid >> 8) as u8 & 0xFF;
@@ -379,6 +389,7 @@ fn decrypt_block(package: &structs::Package, block: &structs::Block, block_buffe
         println!("Block uses normal key.");
         key = &package.aes_key;
     }
+    /*
     let mut decrypter = Crypter::new(
         Cipher::aes_128_gcm(),
         Mode::Decrypt,
@@ -389,17 +400,16 @@ fn decrypt_block(package: &structs::Package, block: &structs::Block, block_buffe
     let mut count = decrypter.update(block_buffer, &mut decrypt_buffer).expect("Decrypt failed updating!");
     count += decrypter.finalize(&mut decrypt_buffer[count..]).expect("Decrypt failed finalizing!");
     println!("Decrypted count: {}", count);
-    //let nonce = Nonce::from_slice(&package_nonce);
-    //let tag = Tag::from_slice(&block.gcmtag);
-    //let cipher = Aes128Gcm::new(key);
-
-    //let cipher = Cipher::aes_128_gcm();
-    //let decrypt_2 = decrypt_aead(cipher, key, Some(&package_nonce), b"", &block_buffer, &block.gcmtag).expect("Decrypt Failed!");
-
-   //let mut buffer: Vec<u8> = Vec::new();
-   //buffer.extend_from_slice(block_buffer);
-   //cipher.decrypt_in_place_detached(nonce, b"", &mut buffer, tag).expect("Decrypt Failed!");
-   //decrypt_buffer = cipher.decrypt(&nonce, &**block_buffer).expect("Decrypt Failed!");
-   //cipher.decrypt_in_place(nonce, &[0u8], buffer)
-   return decrypt_buffer;
+    */
+    //let main_aes_key = [0xD6, 0x2A, 0xB2, 0xC1, 0x0C, 0xC0, 0x1B, 0xC5, 0x35, 0xDB, 0x7B, 0x86, 0x55, 0xC7, 0xDC, 0x3B];
+    let aes_key = Key::<Aes128Gcm>::from_slice(key);
+    let tag = Tag::from_slice(&block.gcmtag);
+    let nonce = Nonce::from_slice(&package_nonce);
+    let cipher = Aes128Gcm::new(aes_key);
+    let mut buffer: Vec<u8> = Vec::new();
+    buffer.extend_from_slice(block_buffer);
+    cipher.decrypt_in_place_detached(nonce, b"", &mut buffer, tag).expect_err("Decrypt Failed!");
+    //cipher.decrypt_in_place(nonce, b"", &mut buffer).expect_err("Decrypt Failed!");
+    //println!("{:x?}", buffer);
+    return buffer;
 }
