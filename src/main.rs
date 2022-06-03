@@ -5,10 +5,14 @@ use std::fs::File;
 use std::io::SeekFrom;
 use std::io::prelude::*;
 use std::io::Write;
+use aes_gcm::{Aes128Gcm, Key, Nonce, Tag};
+use aes_gcm::aead::{AeadInPlace, NewAead};
+
+
 //use openssl::symm::{decrypt, Cipher};
 //use common_math::rounding::*;
 //use libm::floorf;
-const BLOCK_SIZE: u32 = 0x40000;
+const BLOCK_SIZE: u32 = 262144;
 
 fn main()
 {
@@ -127,17 +131,18 @@ pub fn read_entry_table(mut package: structs::Package) -> structs::Package
         file.read(&mut u32buffer).expect("Error reading file");
         entryc = le_u32(&u32buffer);
         
-        entry.startingblock = entryc & 0xFFFFFF;
-        entry.startingblockoffset = ((entryc >> 14) & 0x3FFF) <<4;
+        entry.startingblock = entryc & 16383;
+        entry.startingblockoffset = ((entryc >> 14) & 16383) << 4;
 
         let entryd:u32;
         file.read(&mut u32buffer).expect("Error reading file");
         entryd = le_u32(&u32buffer);
 
-        entry.filesize = (entryd & 0x3FFFFFF) << 4 | (entryc >> 28) & 0xF;
+        entry.filesize = (entryd & 0xF0FFFF3F) << 4 | (entryc >> 28) & 0xF;
 
         package.entries.push(entry);
     }
+    package.entries.remove(0);
     return package;
 }
 
@@ -154,21 +159,23 @@ pub fn read_block_table(mut package:structs::Package) -> structs::Package
         file.seek(SeekFrom::Start(b.into())).expect("Error seeking");
         file.read(&mut u32buffer).expect("Error reading file");
         block.offset = le_u32(&u32buffer);
-
         file.read(&mut u32buffer).expect("Error reading file");
         block.size = le_u32(&u32buffer);
-
+        
         file.read(&mut u16buffer).expect("Error reading file");
         block.patchid = le_u16(&u16buffer);
-
+        
         file.read(&mut u16buffer).expect("Error reading file");
         block.bitflag = le_u16(&u16buffer);
 
         file.seek(SeekFrom::Current(0x20)).expect("Error seeking");
         file.read(&mut gcmtag_buffer).expect("Error reading file");
         block.gcmtag = gcmtag_buffer;
+        //println!("Offset: {}\nSize: {}\nPatchID: {}", &block.offset, &block.size, &block.patchid);
         package.blocks.push(block);
+        //std::thread::sleep(std::time::Duration::from_millis(1000));
     }
+    package.blocks.remove(0);
     return package;
 }
 
@@ -200,15 +207,17 @@ fn extract_files(package: structs::Package)
     }
     println!("Package has {} entries.", package.entries.len());
     //println!("Entry Reference: {}, File Size: {}", &package.entries[1].reference, &package.entries[1].filesize);
-    for i in 1..package.entries.len()
+    for i in 0..package.entries.len()
     {
         let entry = &package.entries[i];
         println!("Entry Reference: {}, File Size: {}", &entry.reference, &entry.filesize);
         if entry.numtype != 26 && entry.numsubtype != 7
         {
+            println!("Entry is not 26/7 (wem). Skipping");
             continue;
         }
         let mut cur_block_id = entry.startingblock;
+        println!("curblockid: {}, starting blockoffset: {} ", cur_block_id, entry.startingblockoffset);
         let mut block_count:u32 = libm::floorf((entry.startingblockoffset as f32 + entry.filesize as f32 - 1.0_f32) / BLOCK_SIZE as f32) as u32;
         if entry.filesize == 0
         {
@@ -217,12 +226,13 @@ fn extract_files(package: structs::Package)
         let last_block_id = cur_block_id + block_count;
         let mut file_buffer = vec![0u8; entry.filesize as usize];
         let mut current_buffer_offset = 0;
-        let cur_block_offset = 0;
-        while cur_block_offset <= last_block_id
+        while cur_block_id <= last_block_id
         {
+            //println!("curblockid: {}", cur_block_id);
             let current_block = &package.blocks[cur_block_id as usize];
+            println!("Offset: {}\nSize: {}\nPatchID: {}", &current_block.offset, &current_block.size, &current_block.patchid);
             let mut file = File::open(&pkg_patch_stream_paths[current_block.patchid as usize]).expect("Error reading file");
-            println!("seek to {}", current_block.offset);
+            println!("seek to {} in file {}", current_block.offset, pkg_patch_stream_paths[current_block.patchid as usize]);
             file.seek(SeekFrom::Start(current_block.offset as u64)).expect("Error seeking");
             let mut block_buffer = vec![0; current_block.size as usize];
             let result = file.read(&mut block_buffer).expect("Error reading file");
@@ -236,11 +246,13 @@ fn extract_files(package: structs::Package)
             if current_block.bitflag & 0x2 != 0
             {
                 //decrypt_buffer = block_buffer;
-                println!("Block is encrypted. Skipping?");
+                println!("Block is encrypted.");
+                //decrypt_buffer = decrypt_block(&package, &current_block, &block_buffer)
                 break;
             }
             else
             {
+                
                 decrypt_buffer = block_buffer
             }
             println!("Decomp Check: {}", current_block.bitflag & 1);
@@ -269,18 +281,21 @@ fn extract_files(package: structs::Package)
                     _cpy_size = BLOCK_SIZE - entry.startingblockoffset;
                     println!("Start block not last block. Cpy size: {}", _cpy_size);
                 }
+                println!("Copying from starting offset {} to end offset {}", entry.startingblockoffset, entry.startingblockoffset + _cpy_size);
+                file_buffer.copy_from_slice(&decomp_buffer[entry.startingblockoffset as usize..entry.startingblockoffset as usize + _cpy_size as usize]);
+
                 //file_buffer.copy_from_slice(&decomp_buffer[entry.startingblockoffset as usize.._cpy_size as usize]);
-                unsafe {
+                //unsafe {
                     //file_buffer.copy_nonoverlapping(&decomp_buffer[entry.startingblockoffset as usize.._cpy_size as usize]);
-                    let dst_ptr = &mut file_buffer[current_buffer_offset] as *mut u8;
-                    let src_ptr = &decomp_buffer[entry.startingblockoffset as usize] as *const u8;
-                    std::ptr::copy_nonoverlapping(src_ptr, dst_ptr, _cpy_size as usize)
-                }
+                    //let dst_ptr = &mut file_buffer[current_buffer_offset] as *mut u8;
+                    //let src_ptr = &decomp_buffer[entry.startingblockoffset as usize] as *const u8;
+                    //std::ptr::copy_nonoverlapping(src_ptr, dst_ptr, _cpy_size as usize)
+                //}
                 //byte_copy(&decomp_buffer[entry.startingblockoffset as usize.._cpy_size as usize], &mut file_buffer[current_buffer_offset..]);
                 current_buffer_offset += _cpy_size as usize;
-                println!("{:?}", file_buffer);
+                //println!("{:?}", file_buffer);
                 println!("{} copied.\nFinish Start block", _cpy_size);
-                std::thread::sleep_ms(500);
+                std::thread::sleep(std::time::Duration::from_millis(1000));
             }
             else if cur_block_id == last_block_id
             {
@@ -297,7 +312,8 @@ fn extract_files(package: structs::Package)
                 println!("Finish Mid block");
             }
             file.flush().expect("Error flushing file");
-            cur_block_id+=1;
+            cur_block_id +=1;
+            println!("blockid+=1 =: {}", cur_block_id);
             decomp_buffer.clear();
         }
         println!("{}", format!("{}/{}-{:04x}.bin", output_path, package.package_id, i));
@@ -309,7 +325,7 @@ fn extract_files(package: structs::Package)
         output_file.sync_all().expect("Error syncing file");
         file_buffer.clear();
         println!("Extracted to {}", &name);
-        std::thread::sleep_ms(1000);
+        std::thread::sleep(std::time::Duration::from_millis(10000));
     }
 }
 
@@ -335,48 +351,35 @@ fn decomp_block(block: &structs::Block, decrypt_buffer: &Vec<u8>, decomp_buffer:
     result = oodle_decomp(decrypt_buffer, block.size, decomp_buffer, BLOCK_SIZE, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3);
 }
 
-
-
-fn decrypt_block(package: &structs::Package, block: &structs::Block, block_buffer: &Vec<u8>, decrypt_buffer: &mut Vec<u8>)
-{
-    //decrypt block_buffer data using OpenSSL AES decryption
-    //store result in decrypt_buffer
-    //iv found as package.nonce, aes key found as package.aes_key
-    let mut aes_key = [0; 0x10];
-    let mut iv = [0; 0x10];
-    aes_key.copy_from_slice(&package.aes_key);
-    iv.copy_from_slice(&package.nonce);
-    //let cipher = Cipher::aes_128_gcm();
-    
-    let mut decrypter = openssl::symm::Crypter::new(
-        Cipher::aes_128_gcm(),
-        openssl::symm::Mode::Decrypt,
-        &aes_key,
-        Some(&iv)).unwrap();
-
-    
-    let mut decrypted_buffer = vec![0; block.size as usize];
-
-    let mut count = decrypter.update(&block_buffer, &mut decrypted_buffer).unwrap();
-    count += decrypter.finalize(&mut decrypted_buffer[count..]).unwrap();
-    decrypt_buffer.copy_from_slice(&decrypted_buffer);
-}
-
-    /*
-    let mut decrypter = openssl::symm::decrypt(
-        cipher,
-        &aes_key,
-        Some(&iv),
-        &block_buffer).unwrap();
-    */
-    //aes_decryptor.set_key(&aes_key);
-    //aes_decryptor.set_iv(&iv);
-
-    //let mut decryptor = openssl::symm::Crypter::new(aes_decryptor, openssl::symm::Mode::Decrypt);
-    //decryptor.init(openssl::symm::Operation::Decrypt).expect("Error initializing decryptor");
-    //decrypt_buffer = decryptor.update(&block_buffer).expect("Error decrypting block");
-    //decryptor.finalize().expect("Error finalizing decryptor");
-    //return decrypt_buffer
-    
-//}
 */
+
+
+fn decrypt_block(package: &structs::Package, block: &structs::Block, block_buffer: &Vec<u8>) -> Vec<u8>
+{
+    let mut package_nonce = vec![0u8; package.nonce.len()];
+    package_nonce.copy_from_slice(&package.nonce);
+
+    package_nonce[0] ^= (package.header.pkgid >> 8) as u8 & 0xFF;
+    package_nonce[1] ^= 38;
+    package_nonce[11] ^= package.header.pkgid as u8 & 0xFF;
+
+    let mut decrypt_buffer = vec![0u8; block.size as usize];
+    let alt_key = &block.bitflag & 4 != 0;
+    let mut key;
+    if alt_key
+    {
+        key = Key::from_slice(&package.aes_alt_key);
+    }
+    else
+    {
+        key = Key::from_slice(&package.aes_key);
+    }
+    let nonce = Nonce::from_slice(&package_nonce);
+    let tag = Tag::from_slice(&block.gcmtag);
+    let cipher = Aes128Gcm::new(key);
+
+   let mut buffer: Vec<u8> = Vec::new();
+   buffer.extend_from_slice(block_buffer);
+   cipher.decrypt_in_place_detached(nonce, &mut decrypt_buffer, &mut buffer, tag).expect("Decrypt Failed!");
+   return decrypt_buffer;
+}
