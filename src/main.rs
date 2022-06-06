@@ -1,51 +1,50 @@
 mod structs;
 mod utils;
-use std::{thread, time::{Instant}, fs, env, io::SeekFrom, io::BufWriter, io::BufReader, io::prelude::*, fs::File};
-use openssl::{cipher::Cipher, cipher_ctx::CipherCtx};
 use utils::*;
 use structs::*;
+extern crate getopts;
+use getopts::Options;
+use std::{thread, fs, env, io::SeekFrom, io::BufWriter, io::BufReader, io::prelude::*, fs::File};
+use openssl::{cipher::Cipher, cipher_ctx::CipherCtx};
 
 const BLOCK_SIZE: u32 = 262144;
 
+fn print_usage(program: &str, opts: Options) {
+    let brief = format!("Usage: {}", program);
+    print!("{}", opts.usage(&brief));
+}
+
 fn main()
 {
-    //i couldve used a crate for this!
-    let start = Instant::now();
     let args: Vec<String> = env::args().collect();
-    if args.len() < 2 {
-        println!("Usage: {} -p [Packages Path] -i [Package Id]", args[0]);
-        return;
+    let program = args[0].clone();
+    let mut opts = Options::new();
+    opts.reqopt("p", "", "Packages Path", "PATH");
+    opts.reqopt("i", "", "Package ID", "ID");
+    opts.optopt("o", "", "Output Path", "PATH");
+
+    let matches = match opts.parse(&args[1..]) {
+        Ok(m) => { m }
+        Err(f) => { println!("{}",f); print_usage(&program, opts); return; }
+    };
+
+    let pkgspath = matches.opt_str("p").unwrap();
+    let pkgid = matches.opt_str("i").unwrap();
+    let output_path_base:String = String::new();
+    if matches.opt_present("o") {
+        matches.opt_str("o").unwrap();
     }
-    let package_check = &args[1];
-    if package_check != "-p" && args.len() < 3 {
-        println!("Usage: {} -p [Packages Path] -i [Package Id]", args[0]);
-        return
+    else {
+        format!("{}/output/{}", env::current_dir().unwrap().display(), pkgid);
     }
 
-    let id_check = &args[3];
-
-    if id_check != "-i" && args.len() < 5 {
-        println!("Usage: {} -p [Packages Path] -i [Package Id]", args[0]);
-        return
-    }
-
-    if args.len() >= 6
-    {
-        let out_check = &args[5];
-        if out_check == "-o" && args.len() >= 7 {
-            println!("Output Path: {}", args[6]);
-        }
-    }
-    let output_path_base = args[6].to_string();
-
-    let mut package = Package::new(args[2].to_string(), args[4].to_string());
+    let mut package = Package::new(pkgspath, pkgid);
     read_header(&mut package);
     modify_nonce(&mut package);
     read_entry_table(&mut package);
     read_block_table(&mut package);
     extract_files(package, output_path_base);
-    let elapsed = start.elapsed();
-    println!("{}ms", elapsed.as_millis());
+    println!("Done extracting.");
 }
 
 pub fn read_header(package: &mut structs::Package) -> bool
@@ -188,10 +187,6 @@ fn extract_files(package: structs::Package, output_path_base: String)
         for i in 0..package.entries.len()
         {
             let entry = &package.entries[i];
-            if entry.numtype != 26
-            {
-                continue;
-            }
             let mut cur_block_id = entry.startingblock;
             let mut block_count:u32 = libm::floorf((entry.startingblockoffset as f32 + entry.filesize as f32 - 1.0_f32) / BLOCK_SIZE as f32) as u32;
             if entry.filesize == 0
@@ -281,16 +276,12 @@ fn extract_files(package: structs::Package, output_path_base: String)
                 cus_out.push_str("/bnk"); 
                 _file_name = format!("{}-{:04x}", package.package_id, i);
             }
-            //else
-            //{
-                //continue;
-                //_ext = "bin";
-                //cus_out.push_str(format!("/unknown/{}/", entry.reference.to_uppercase()).as_str());
-                //file_name = format!("{}-{:04x}", package.package_id, i);
-                //_file_name = format!("{}", get_hash_from_file(format!("{}-{:04x}", package.package_id, i)));
-                //println!("{}", _file_name);
-                //std::thread::sleep(std::time::Duration::from_millis(1000));
-            //}          
+            else
+            {
+                _ext = "bin";
+                cus_out.push_str(format!("/unknown/{}/", entry.reference.to_uppercase()).as_str());
+                _file_name = get_hash_from_file(format!("{}-{:04x}", package.package_id, i));
+            }          
             fs::create_dir_all(&cus_out).expect("Error creating directory");
             let mut stream = BufWriter::new(File::create(format!("{}/{}.{}", cus_out, _file_name, _ext)).expect("Error creating file"));
             stream.write_all(&file_buffer).expect("Error writing file");
@@ -299,25 +290,24 @@ fn extract_files(package: structs::Package, output_path_base: String)
         }
     });
     thread.join().unwrap();
-    println!("Done extracting.");
 }
 
 fn decrypt_block(package: &structs::Package, block: &structs::Block, mut block_buffer: Vec<u8>) -> Vec<u8>
 {
     let mut decrypt_buffer:Vec<u8> = vec![];
     let alt_key = &block.bitflag & 4 != 0;
-    let key;
+    let mut _key = &[0u8; 16];
     if alt_key
     {
-        key = &package.aes_alt_key;
+        _key = &package.aes_alt_key;
     }
     else
     {
-        key = &package.aes_key;
+        _key = &package.aes_key;
     };
     let cipher = Cipher::aes_128_gcm();
     let mut ctx = CipherCtx::new().unwrap();
-    ctx.decrypt_init(Some(cipher), Some(key), Some(&package.nonce)).unwrap();
+    ctx.decrypt_init(Some(cipher), Some(_key), Some(&package.nonce)).unwrap();
     ctx.set_tag(&block.gcmtag).unwrap();
     ctx.cipher_update_vec(&block_buffer, &mut decrypt_buffer).unwrap();
     ctx.cipher_final_vec(&mut decrypt_buffer).expect_err("Failed finalizing decrypter");

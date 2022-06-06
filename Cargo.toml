@@ -7,12 +7,17 @@ edition = "2021"
 
 [dependencies]
 
-libm = "0.2.2" #floor
-libloading = "0.7" #oodle
-openssl = "0.10.40" #AES-128-GCM decryption
+libm = "0.2.2" # floor for block count
+libloading = "0.7" # oodle decompression
+openssl = "0.10.40" # AES-128-GCM decryption
+getopts = "0.2" # CLI arg parsing
+
 
 [profile.dev]
 opt-level = 1
 
 [profile.release]
 panic = "abort"
+strip = true
+lto = true
+incremental = true

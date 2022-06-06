@@ -1,30 +1,30 @@
 #![allow(dead_code)]
 use std::{u8, u16, u32, u64}; 
-
+#[inline(always)]
 pub fn le_u16(buf: &[u8]) -> u16 {
     ((buf[1] as u16) << 8) |
     buf[0] as u16
 }
-
+#[inline(always)]
 pub fn be_u16(buf: &[u8]) -> u16 {
     ((buf[0] as u16) << 8) |
     buf[1] as u16
 }
-
+#[inline(always)]
 pub fn le_u32(buf: &[u8]) -> u32 {
     ((buf[3] as u32) << 24) |
     ((buf[2] as u32) << 16) |
     ((buf[1] as u32) << 8) |
     buf[0] as u32
 }
-
+#[inline(always)]
 pub fn be_u32(buf: &[u8]) -> u32 {
     ((buf[0] as u32) << 24) |
     ((buf[1] as u32) << 16) |
     ((buf[2] as u32) << 8) |
     buf[3] as u32
 }
-
+#[inline(always)]
 pub fn swap_u16_endianness(x:u16) -> u16 {
 	(x << 8) + (x >> 8)
 }
@@ -46,23 +46,23 @@ pub fn swap_u64_endianness(x:u64) -> u64 {
 	((x & 0x00FF000000000000) >> 40) |
 	(x >> 56)
 }
-
+#[inline(always)]
 pub fn hex_str_to_u16(hash:String) -> u16{
     u16::from_str_radix(hash.as_str(), 16).unwrap()
 }
-
+#[inline(always)]
 pub fn hex_str_to_u32(hash:String) -> u32{
     u32::from_str_radix(&hash, 16).unwrap()
 }
-
+#[inline(always)]
 pub fn hex_str_to_u64(hash:String) -> u64{
     u64::from_str_radix(&hash, 16).unwrap()
 }
-
+#[inline(always)]
 pub fn u16_to_hex_str(hash:u32) -> String{
     format!("{:04x}", hash)
 }
-
+#[inline(always)]
 pub fn u32_to_hex_str(hash:u32) -> String{
     format!("{:08x}", hash)
 }
