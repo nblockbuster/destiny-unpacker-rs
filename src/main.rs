@@ -22,7 +22,7 @@ fn main()
     opts.reqopt("p", "", "Packages Path", "PATH");
     opts.reqopt("i", "", "Package ID", "ID");
     opts.optopt("o", "", "Output Path", "PATH");
-    opts.optopt("n", "nonaudio", "Does NOT skip non-audio related files", "");
+    opts.optflag("n", "nonaudio", "Does NOT skip non-audio related files");
 
     let matches = match opts.parse(&args[1..]) {
         Ok(m) => { m }
