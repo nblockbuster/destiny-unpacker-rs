@@ -43,6 +43,11 @@ pub struct Package {
     pub aes_alt_key: [u8; 16],
 }
 
+pub struct ExtrOpts {
+    pub hexid:bool,
+    pub skip_non_audio:bool,
+}
+
 impl Package {
     pub fn new(pkgspath:String, pkgid:String) -> Package {
             let mut _exists:bool=true;
@@ -134,9 +139,6 @@ impl Entry {
             filesize: 0,
         }
     }
-    pub fn default() -> Self{
-        Self::new()
-    }
 }
 impl Default for Entry {
     fn default() -> Self {
@@ -155,11 +157,22 @@ impl Block {
             gcmtag: [0; 16],
         }
     }
-    pub fn default() -> Self{
+}
+impl Default for Block {
+    fn default() -> Self {
         Self::new()
     }
 }
-impl Default for Block {
+
+impl ExtrOpts {
+    pub fn new() -> ExtrOpts {
+        ExtrOpts {
+            hexid: false,
+            skip_non_audio: false,
+        }
+    }
+}
+impl Default for ExtrOpts {
     fn default() -> Self {
         Self::new()
     }

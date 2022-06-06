@@ -23,6 +23,7 @@ fn main()
     opts.reqopt("i", "", "Package ID", "ID");
     opts.optopt("o", "", "Output Path", "PATH");
     opts.optflag("n", "nonaudio", "Does NOT skip non-audio related files");
+    opts.optflag("h", "hexid", "Exports .WEMs as hexidecimal IDs");
 
     let matches = match opts.parse(&args[1..]) {
         Ok(m) => { m }
@@ -40,16 +41,27 @@ fn main()
     }
 
     let mut skip_non_audio:bool = true;
+    let mut hexid:bool = false;
+    
     if matches.opt_present("n") {
         skip_non_audio = false;
     }
+    if matches.opt_present("h") {
+        hexid = true;
+    }
+
+    let extr_opts:ExtrOpts;
+    extr_opts = ExtrOpts {
+        skip_non_audio: skip_non_audio,
+        hexid: hexid,
+    };
 
     let mut package = Package::new(pkgspath, pkgid);
     read_header(&mut package);
     modify_nonce(&mut package);
     read_entry_table(&mut package);
     read_block_table(&mut package);
-    extract_files(package, _output_path_base, skip_non_audio);
+    extract_files(package, _output_path_base, extr_opts);
     println!("Done extracting.");
 }
 
@@ -177,7 +189,7 @@ fn modify_nonce(package: &mut structs::Package)
     package.nonce[11] ^= package.header.pkgid as u8;
 }
 
-fn extract_files(package: structs::Package, output_path_base: String, skip_non_audio: bool)
+fn extract_files(package: structs::Package, output_path_base: String, extr_opts: ExtrOpts)
 {
     let mut pkg_patch_stream_paths: Vec<String> = Vec::new();
     for i in 0..=package.header.patchid
@@ -194,7 +206,7 @@ fn extract_files(package: structs::Package, output_path_base: String, skip_non_a
         {
             let entry = &package.entries[i];
             
-            if skip_non_audio && !(entry.numtype == 26 && (entry.numsubtype == 6 || entry.numsubtype == 7)) {
+            if extr_opts.skip_non_audio && !(entry.numtype == 26 && (entry.numsubtype == 6 || entry.numsubtype == 7)) {
                 continue;
             }
 
@@ -275,7 +287,10 @@ fn extract_files(package: structs::Package, output_path_base: String, skip_non_a
             {
                 _ext = "wem";
                 cus_out += "\\wem";
-                _file_name = entry.reference.to_uppercase();
+                _file_name = hex_str_to_u32(entry.reference.clone()).to_string();
+                if extr_opts.hexid {
+                    _file_name = entry.reference.to_uppercase();
+                }
             }
             else if entry.numtype == 26 && entry.numsubtype == 6
             {
