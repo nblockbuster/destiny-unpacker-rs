@@ -40,7 +40,7 @@ fn main()
     }
 
     let mut skip_non_audio:bool = true;
-    if matches.opt_present("s") {
+    if matches.opt_present("n") {
         skip_non_audio = false;
     }
 
@@ -267,10 +267,6 @@ fn extract_files(package: structs::Package, output_path_base: String, skip_non_a
                 reader.seek(SeekFrom::Start(0)).expect("Error seeking");
                 cur_block_id +=1;
                 _decomp_buffer.clear();
-            }
-            if le_u32(&file_buffer) == 0
-            {
-                continue;
             }
             let mut cus_out = output_path_base.clone();
             let mut _file_name:String = String::new();
