@@ -19,5 +19,3 @@ opt-level = 1
 [profile.release]
 panic = "abort"
 strip = true
-lto = true
-incremental = true

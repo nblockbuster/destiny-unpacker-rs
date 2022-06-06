@@ -4,7 +4,7 @@ use utils::*;
 use structs::*;
 extern crate getopts;
 use getopts::Options;
-use std::{thread, fs, env, io::SeekFrom, io::BufWriter, io::BufReader, io::prelude::*, fs::File};
+use std::{thread, process::{Command}, fs, env, io::SeekFrom, io::BufWriter, io::BufReader, io::prelude::*, fs::File};
 use openssl::{cipher::Cipher, cipher_ctx::CipherCtx};
 
 const BLOCK_SIZE: u32 = 262144;
@@ -24,6 +24,7 @@ fn main()
     opts.optopt("o", "", "Output Path", "PATH");
     opts.optflag("n", "nonaudio", "Does NOT skip non-audio related files");
     opts.optflag("h", "hexid", "Exports .WEMs as hexidecimal IDs");
+    opts.optflag("w", "wavconv", "Exports wems as wavs, deleting the wems");
 
     let matches = match opts.parse(&args[1..]) {
         Ok(m) => { m }
@@ -42,18 +43,21 @@ fn main()
 
     let mut skip_non_audio:bool = true;
     let mut hexid:bool = false;
-    
+    let mut wavconv:bool = false;
+
     if matches.opt_present("n") {
         skip_non_audio = false;
     }
     if matches.opt_present("h") {
         hexid = true;
     }
-
-    let extr_opts:ExtrOpts;
-    extr_opts = ExtrOpts {
-        skip_non_audio: skip_non_audio,
-        hexid: hexid,
+    if matches.opt_present("w") {
+        wavconv = true
+    }
+    let extr_opts:ExtrOpts = ExtrOpts {
+        skip_non_audio,
+        hexid,
+        wavconv,
     };
 
     let mut package = Package::new(pkgspath, pkgid);
@@ -191,6 +195,7 @@ fn modify_nonce(package: &mut structs::Package)
 
 fn extract_files(package: structs::Package, output_path_base: String, extr_opts: ExtrOpts)
 {
+    let output_path = output_path_base.clone();
     let mut pkg_patch_stream_paths: Vec<String> = Vec::new();
     for i in 0..=package.header.patchid
     {
@@ -312,6 +317,33 @@ fn extract_files(package: structs::Package, output_path_base: String, extr_opts:
         }
     });
     thread.join().unwrap();
+    
+    if extr_opts.wavconv {
+        let wem_dir = output_path.clone() + "\\wem\\";
+        fs::create_dir_all(output_path + "\\wav").expect("Error creating directory");
+        let thread = thread::spawn(move || {
+            for entry in fs::read_dir(wem_dir).unwrap() {
+            let path_bufer = entry.unwrap().path();
+            let wem_path = path_bufer.display().to_string().replace('/', "\\");
+            let wav_path = wem_path.clone().replace("\\wem\\", "\\wav\\").replace(".wem", ".wav");
+            //let vgms_arg:String = format!("res\\vgmstream\\vgmstream-cli.exe -o \"{}\" \"{}\"", wav_path, wem_path);
+            //let vgmarg = vgms_arg.as_str();
+            //println!("{}", vgmarg);
+            let output = Command::new("cmd").arg("/C").arg("res\\vgmstream\\vgmstream-cli.exe").arg("-o").arg(&wav_path).arg(&wem_path).output().expect("Failed to execute vgmstream.");
+            if !output.status.success()
+            {
+                println!("{}", String::from_utf8_lossy(&output.stderr));
+            }
+            if output.status.success()
+            {
+                println!("{}", String::from_utf8_lossy(&output.stdout));
+                fs::remove_file(wem_path).expect("Failed removing wem file");
+            }
+        }
+        });
+        thread.join().unwrap();
+    }
+
 }
 
 fn decrypt_block(package: &structs::Package, block: &structs::Block, mut block_buffer: Vec<u8>) -> Vec<u8>

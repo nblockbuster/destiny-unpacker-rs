@@ -46,6 +46,7 @@ pub struct Package {
 pub struct ExtrOpts {
     pub hexid:bool,
     pub skip_non_audio:bool,
+    pub wavconv:bool,
 }
 
 impl Package {
@@ -168,7 +169,8 @@ impl ExtrOpts {
     pub fn new() -> ExtrOpts {
         ExtrOpts {
             hexid: false,
-            skip_non_audio: false,
+            skip_non_audio: true,
+            wavconv: false,
         }
     }
 }
