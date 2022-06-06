@@ -194,7 +194,7 @@ fn extract_files(package: structs::Package, output_path_base: String, skip_non_a
         {
             let entry = &package.entries[i];
             
-            if !skip_non_audio && (entry.numtype == 26 && entry.numsubtype == 6 || entry.numsubtype == 7) {
+            if skip_non_audio && !(entry.numtype == 26 && (entry.numsubtype == 6 || entry.numsubtype == 7)) {
                 continue;
             }
 
