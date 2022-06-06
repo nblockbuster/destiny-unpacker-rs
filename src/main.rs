@@ -1,6 +1,6 @@
 mod structs;
 mod utils;
-use std::{thread, time::{Instant}, fs, env, io::SeekFrom, io::BufWriter, io::BufReader, io::prelude::*, fs::File};
+use std::{thread, fs, env, io::SeekFrom, io::BufWriter, io::BufReader, io::prelude::*, fs::File};
 use openssl::{cipher::Cipher, cipher_ctx::CipherCtx};
 use utils::*;
 use structs::*;
@@ -10,7 +10,6 @@ const BLOCK_SIZE: u32 = 262144;
 fn main()
 {
     //i couldve used a crate for this!
-    let start = Instant::now();
     let args: Vec<String> = env::args().collect();
     if args.len() < 2 {
         println!("Usage: {} -p [Packages Path] -i [Package Id]", args[0]);
@@ -44,8 +43,6 @@ fn main()
     read_entry_table(&mut package);
     read_block_table(&mut package);
     extract_files(package, output_path_base);
-    let elapsed = start.elapsed();
-    println!("{}ms", elapsed.as_millis());
 }
 
 pub fn read_header(package: &mut structs::Package) -> bool
@@ -186,7 +183,6 @@ fn extract_files(package: structs::Package, output_path_base: String)
         b.insert(pkg_patch_path.len()-5, a as char);
         pkg_patch_stream_paths.push(b.to_string());
     }
-    let thread_start = Instant::now();
     let thread = thread::spawn(move || {
         for i in 0..package.entries.len()
         {
@@ -302,8 +298,6 @@ fn extract_files(package: structs::Package, output_path_base: String)
         }
     });
     thread.join().unwrap();
-    let thread_time = thread_start.elapsed().as_millis();
-    println!("Threads took {}ms to execute.", thread_time);
     println!("Done extracting.");
 }
 

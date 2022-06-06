@@ -10,7 +10,6 @@ edition = "2021"
 libm = "0.2.2" #floor
 libloading = "0.7" #oodle
 openssl = "0.10.40" #AES-128-GCM decryption
-chrono = "0.4.19" #time
 
 [profile.dev]
 opt-level = 1
