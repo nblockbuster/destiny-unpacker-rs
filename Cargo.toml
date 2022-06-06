@@ -7,13 +7,10 @@ edition = "2021"
 
 [dependencies]
 
-libm = "0.2.2"
-aes-gcm = "0.10.0-pre"
-libloading = "0.7"
-# openssl = "0.10.40"
-# aead = "0.4.3"
-# aes = "0.8.1"
+libm = "0.2.2" #floor
+libloading = "0.7" #oodle
+openssl = "0.10.40" #AES-128-GCM decryption
+chrono = "0.4.19" #time
 
-# common_math = "0.3.0"
-# half = "1.8.2"
-#winapi = { version = "0.3.9", features = ["libloaderapi"] }
+[profile.dev]
+opt-level = 1

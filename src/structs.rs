@@ -41,18 +41,15 @@ pub struct Package {
     pub blocks: Vec<Block>,
     pub aes_key: [u8; 16],
     pub aes_alt_key: [u8; 16],
-    //oodle_lz_decompress: i64,
-    //hoodle_dll: 
-
 }
 
 impl Package {
     pub fn new(pkgspath:String, pkgid:String) -> Package {
-            let mut exists:bool=true;
+            let mut _exists:bool=true;
             let packages_path = pkgspath;
             let package_id = pkgid;
-            exists = Path::new(&packages_path).exists();
-            if exists == false {
+            _exists = Path::new(&packages_path).exists();
+            if _exists == false {
                 println!("Packages Path does not exist");
                 process::exit(1);
             }
@@ -68,8 +65,6 @@ impl Package {
                 entries: vec![Entry::new()],
                 aes_key: [0xD6, 0x2A, 0xB2, 0xC1, 0x0C, 0xC0, 0x1B, 0xC5, 0x35, 0xDB, 0x7B, 0x86, 0x55, 0xC7, 0xDC, 0x3B],
                 aes_alt_key: [0x3A, 0x4A, 0x5D, 0x36, 0x73, 0xA6, 0x60, 0x58, 0x7E, 0x63, 0xE6, 0x76, 0xE4, 0x08, 0x92, 0xB5],
-                //oodle_lz_decompress: 0,
-                //hoodle_dll:
             }
     }
 }
