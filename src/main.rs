@@ -95,7 +95,7 @@ pub fn read_entry_table(package: &mut Package) -> bool
     let file = File::open(package.package_path.clone()).expect("Error reading file");
     let mut reader = BufReader::new(file);
     let a = package.header.entry_table_offset+package.header.entry_table_size*16;
-    for i in (package.header.entry_table_offset.to_owned()..a).step_by(16)
+    for i in (package.header.entry_table_offset..a).step_by(16)
     {
         let mut entry: Entry = Entry::new();
 
