@@ -13,3 +13,6 @@ openssl = "0.10.40" #AES-128-GCM decryption
 
 [profile.dev]
 opt-level = 1
+
+[profile.release]
+panic = "abort"

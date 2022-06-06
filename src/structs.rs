@@ -49,18 +49,18 @@ impl Package {
             let packages_path = pkgspath;
             let package_id = pkgid;
             _exists = Path::new(&packages_path).exists();
-            if _exists == false {
+            if !_exists {
                 println!("Packages Path does not exist");
                 process::exit(1);
             }
             let package_path = get_latest_patch_id_path(&packages_path, &package_id);
-            let pkgp = package_path.clone();
+            let pkgp = package_path;
             Package {
                 header: Header::new(),
                 nonce: [0x84, 0xEA, 0x11, 0xC0, 0xAC, 0xAB, 0xFA, 0x20, 0x33, 0x11, 0x26, 0x99],
                 blocks: vec![Block::new()],
-                packages_path: packages_path,
-                package_id: package_id,
+                packages_path,
+                package_id,
                 package_path: pkgp,
                 entries: vec![Entry::new()],
                 aes_key: [0xD6, 0x2A, 0xB2, 0xC1, 0x0C, 0xC0, 0x1B, 0xC5, 0x35, 0xDB, 0x7B, 0x86, 0x55, 0xC7, 0xDC, 0x3B],
@@ -75,7 +75,7 @@ fn get_latest_patch_id_path(packages_path: &str, package_id: &str) -> String {
     let mut pa:String;
     for entry in std::fs::read_dir(packages_path).unwrap() {
         let entry = entry.unwrap();
-        let path:String = String::from(entry.path().display().to_string());
+        let path:String = entry.path().display().to_string();
         //println!("{}",path);     
         if path.contains(package_id) {
             //println!("Match: {}",path);
@@ -117,6 +117,11 @@ impl Header {
         }
     }
 }
+impl Default for Header {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl Entry {
     pub fn new() -> Entry {
@@ -128,6 +133,14 @@ impl Entry {
             startingblockoffset: 0,
             filesize: 0,
         }
+    }
+    pub fn default() -> Self{
+        Self::new()
+    }
+}
+impl Default for Entry {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -141,5 +154,13 @@ impl Block {
             bitflag: 0,
             gcmtag: [0; 16],
         }
+    }
+    pub fn default() -> Self{
+        Self::new()
+    }
+}
+impl Default for Block {
+    fn default() -> Self {
+        Self::new()
     }
 }
