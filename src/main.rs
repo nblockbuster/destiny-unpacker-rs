@@ -22,6 +22,7 @@ fn main()
     opts.reqopt("p", "", "Packages Path", "PATH");
     opts.reqopt("i", "", "Package ID", "ID");
     opts.optopt("o", "", "Output Path", "PATH");
+    opts.optopt("n", "nonaudio", "Does NOT skip non-audio related files", "");
 
     let matches = match opts.parse(&args[1..]) {
         Ok(m) => { m }
@@ -30,12 +31,17 @@ fn main()
 
     let pkgspath = matches.opt_str("p").unwrap();
     let pkgid = matches.opt_str("i").unwrap();
-    let output_path_base:String = String::new();
+    let mut _output_path_base:String = String::new();
     if matches.opt_present("o") {
-        matches.opt_str("o").unwrap();
+        _output_path_base = matches.opt_str("o").unwrap();
     }
     else {
-        format!("{}/output/{}", env::current_dir().unwrap().display(), pkgid);
+        _output_path_base = format!("{}/output/{}", env::current_dir().unwrap().display(), pkgid);
+    }
+
+    let mut skip_non_audio:bool = true;
+    if matches.opt_present("s") {
+        skip_non_audio = false;
     }
 
     let mut package = Package::new(pkgspath, pkgid);
@@ -43,7 +49,7 @@ fn main()
     modify_nonce(&mut package);
     read_entry_table(&mut package);
     read_block_table(&mut package);
-    extract_files(package, output_path_base);
+    extract_files(package, _output_path_base, skip_non_audio);
     println!("Done extracting.");
 }
 
@@ -171,7 +177,7 @@ fn modify_nonce(package: &mut structs::Package)
     package.nonce[11] ^= package.header.pkgid as u8;
 }
 
-fn extract_files(package: structs::Package, output_path_base: String)
+fn extract_files(package: structs::Package, output_path_base: String, skip_non_audio: bool)
 {
     let mut pkg_patch_stream_paths: Vec<String> = Vec::new();
     for i in 0..=package.header.patchid
@@ -187,6 +193,11 @@ fn extract_files(package: structs::Package, output_path_base: String)
         for i in 0..package.entries.len()
         {
             let entry = &package.entries[i];
+            
+            if !skip_non_audio && (entry.numtype == 26 && entry.numsubtype == 6 || entry.numsubtype == 7) {
+                continue;
+            }
+
             let mut cur_block_id = entry.startingblock;
             let mut block_count:u32 = libm::floorf((entry.startingblockoffset as f32 + entry.filesize as f32 - 1.0_f32) / BLOCK_SIZE as f32) as u32;
             if entry.filesize == 0
