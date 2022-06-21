@@ -11,6 +11,7 @@ libm = "0.2.2" # floor for block count
 libloading = "0.7" # oodle decompression
 openssl = "0.10.40" # AES-128-GCM decryption
 getopts = "0.2" # CLI arg parsing
+libc = "0.2" # c_void in vgmstream
 
 
 [profile.dev]

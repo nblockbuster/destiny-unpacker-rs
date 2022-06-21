@@ -1,5 +1,24 @@
 #![allow(dead_code)]
 use std::{u8, u16, u32, u64}; 
+use libm::floorf;
+
+#[inline(always)]
+pub fn split_u16(spl:u16) -> [u8; 2] {
+    let mut spl_arr: [u8; 2] = [0; 2];
+    spl_arr[0] = (spl & 0xFF) as u8;
+    spl_arr[1] = ((spl >> 8) & 0xFF) as u8;
+    spl_arr
+}
+#[inline(always)]
+pub fn split_u32(spl:u32) -> [u8; 4] {
+    let mut spl_arr: [u8; 4] = [0; 4];
+    spl_arr[0] = (spl & 0xFF) as u8;
+    spl_arr[1] = ((spl >> 8) & 0xFF) as u8;
+    spl_arr[2] = ((spl >> 16) & 0xFF) as u8;
+    spl_arr[3] = ((spl >> 24) & 0xFF) as u8;
+    spl_arr
+}
+
 #[inline(always)]
 pub fn le_u16(buf: &[u8]) -> u16 {
     ((buf[1] as u16) << 8) |
@@ -59,7 +78,7 @@ pub fn hex_str_to_u64(hash:String) -> u64{
     u64::from_str_radix(&hash, 16).unwrap()
 }
 #[inline(always)]
-pub fn u16_to_hex_str(hash:u32) -> String{
+pub fn u16_to_hex_str(hash:u16) -> String{
     format!("{:04x}", hash)
 }
 #[inline(always)]
@@ -74,4 +93,12 @@ pub fn get_hash_from_file(name:String) -> String {
     let secondhex_int:u16 = hex_str_to_u16(id.to_string());
     let one:u32 = firsthex_int as u32 * 8192;
     format!("{:08x}", swap_u32_endianness(one+secondhex_int as u32+2155872256))
+}
+
+pub fn get_file_from_hash(hash:String) -> String {
+    let first_int:u32 = hex_str_to_u32(hash);
+    let one:u32 = first_int - 2155872256;
+    let first_hex:String = u16_to_hex_str(floorf(one as f32 /8192.0) as u16);
+    let second_hex:String = u16_to_hex_str((first_int % 8192) as u16);
+    format!("{}-{}", first_hex, second_hex)
 }

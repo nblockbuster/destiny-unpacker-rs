@@ -1,6 +1,4 @@
-use std::path::Path;
-use std::process;
-
+#[derive(Clone)]
 pub struct Entry {
     pub reference: String,
     pub numtype: u8,
@@ -10,6 +8,7 @@ pub struct Entry {
     pub filesize: u32
 }
 
+#[derive(Copy, Clone)]
 pub struct Header {
     pub pkgid: u16,
     pub patchid: u16,
@@ -21,6 +20,7 @@ pub struct Header {
     pub hash64_table_size: u32,
 }
 
+#[derive(Copy, Clone)]
 pub struct Block
 {
 	pub id: u32,
@@ -31,82 +31,12 @@ pub struct Block
     pub gcmtag: [u8; 16],
 }
 
-pub struct Package {
-    pub header: Header,
-    pub packages_path: String,
-    pub entries: Vec<Entry>,
-    pub package_path: String,
-    pub package_id: String,
-    pub nonce: [u8; 12],
-    pub blocks: Vec<Block>,
-    pub aes_key: [u8; 16],
-    pub aes_alt_key: [u8; 16],
-}
-
 pub struct ExtrOpts {
     pub hexid:bool,
     pub skip_non_audio:bool,
     pub wavconv:bool,
-}
-
-impl Package {
-    pub fn new(pkgspath:String, pkgid:String) -> Package {
-            let mut _exists:bool=true;
-            let packages_path = pkgspath;
-            let package_id = pkgid;
-            _exists = Path::new(&packages_path).exists();
-            if !_exists {
-                println!("Packages Path does not exist");
-                process::exit(1);
-            }
-            let package_path = get_latest_patch_id_path(&packages_path, &package_id);
-            let pkgp = package_path;
-            Package {
-                header: Header::new(),
-                nonce: [0x84, 0xEA, 0x11, 0xC0, 0xAC, 0xAB, 0xFA, 0x20, 0x33, 0x11, 0x26, 0x99],
-                blocks: vec![Block::new()],
-                packages_path,
-                package_id,
-                package_path: pkgp,
-                entries: vec![Entry::new()],
-                aes_key: [0xD6, 0x2A, 0xB2, 0xC1, 0x0C, 0xC0, 0x1B, 0xC5, 0x35, 0xDB, 0x7B, 0x86, 0x55, 0xC7, 0xDC, 0x3B],
-                aes_alt_key: [0x3A, 0x4A, 0x5D, 0x36, 0x73, 0xA6, 0x60, 0x58, 0x7E, 0x63, 0xE6, 0x76, 0xE4, 0x08, 0x92, 0xB5],
-            }
-    }
-}
-
-fn get_latest_patch_id_path(packages_path: &str, package_id: &str) -> String {
-    let mut latest_patch_id:u16 = u16::MIN;
-    let mut package_name:String = String::new();
-    let mut pa:String;
-    for entry in std::fs::read_dir(packages_path).unwrap() {
-        let entry = entry.unwrap();
-        let path:String = entry.path().display().to_string();
-        //println!("{}",path);     
-        if path.contains(package_id) {
-            //println!("Match: {}",path);
-            let patch_str = &path[path.len()-5..];
-            let patch_str = &patch_str[0..1];
-            //println!("{}",&path[path.len()-5..]);
-            //println!("{}",patch_str);
-            let patch_id:u16 = patch_str.parse::<u16>().unwrap();
-            if patch_id > latest_patch_id {
-                latest_patch_id = patch_id;
-                let path2 = path.replace('\\', "/");
-                pa = path2.clone().to_owned();
-                package_name = pa.to_string()[0..pa.to_string().len()-6].to_string();
-                //println!("{package_name}");
-                let pos = package_name.rfind('/');
-                let val = package_name.len()-pos.unwrap();
-                package_name = package_name[pos.unwrap()..].to_string();
-                package_name = package_name[..val].to_string();
-                //println!("Latest Patch Id: {}", latest_patch_id);
-                //println!("Latest Patch Path: {}", package_name);
-            }
-        }
-    }
-    println!("{packages_path}/{package_name}_{latest_patch_id}.pkg");
-    return format!("{}/{}_{}.pkg", packages_path, package_name, &latest_patch_id.to_string());
+    pub oodle:libloading::Library,
+    pub output_path:String
 }
 
 impl Header {
@@ -171,6 +101,8 @@ impl ExtrOpts {
             hexid: false,
             skip_non_audio: true,
             wavconv: false,
+            oodle: unsafe { libloading::Library::new("oo2core_9_win64.dll") }.unwrap(),
+            output_path: String::new(),
         }
     }
 }

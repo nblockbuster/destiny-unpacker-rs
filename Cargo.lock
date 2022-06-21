@@ -31,6 +31,7 @@ name = "destiny-unpacker-rs"
 version = "0.1.0"
 dependencies = [
  "getopts",
+ "libc",
  "libloading",
  "libm",
  "openssl",
