@@ -6,10 +6,14 @@ pub use utils::*;
 #[path = "structs.rs"]
 pub mod structs;
 pub use structs::*;
-use std::{fs, thread, process::Command, io::SeekFrom, io::{BufReader, BufWriter, prelude::*}, fs::File};
+use std::{fs, thread, process::Command, io::{BufReader, BufWriter, prelude::*, SeekFrom}, fs::File};
 use openssl::{cipher::Cipher, cipher_ctx::CipherCtx};
+use tracing::{error, info};
 
 const BLOCK_SIZE:u32 = 262144;
+
+type OodleType = extern "C" fn(compressed_bytes: &u8, size_of_compressed_bytes:i64, decompressed_bytes: *mut u8, size_of_decompressed_bytes:i64,
+    a:u32, b:u32, c:u32, d:u32, e:u32, f:u32, g:u32, h:u32, i:u32, threadModule:u32) -> i64;
 
 pub struct Package {
     pub header: Header,
@@ -21,17 +25,19 @@ pub struct Package {
     pub blocks: Vec<Block>,
     pub aes_key: [u8; 16],
     pub aes_alt_key: [u8; 16],
-    pub oodle:libloading::Library,
+    pub oodle:libloading::Library
 }
 
 impl Package {
-    pub fn new(pkgspath:String, pkgid:String) -> Package {
+
+    pub fn new(pkgspath:String, pkgid:String) -> Package
+    {
         let mut _exists:bool=true;
         let packages_path = pkgspath;
         let package_id = pkgid;
         _exists = Path::new(&packages_path).exists();
         if !_exists {
-            println!("Packages Path does not exist");
+            error!("Packages Path does not exist");
             process::exit(1);
         }
         let package_path = get_latest_patch_id_path(&packages_path, &package_id);
@@ -168,6 +174,7 @@ impl Package {
         true
     }
 
+    #[inline]
     pub fn modify_nonce(&mut self)
     {
         self.nonce[0] ^= (self.header.pkgid >> 8) as u8;
@@ -217,7 +224,7 @@ impl Package {
                     let result = reader.read(&mut block_buffer).expect("Error reading file");
                     if result != current_block.size as usize
                     {
-                        println!("Error reading file");
+                        error!("Error reading file");
                     }
                     let mut _decrypt_buffer:Vec<u8> = vec![0u8; current_block.size as usize];
                     let mut _decomp_buffer:Vec<u8> = vec![0u8; BLOCK_SIZE as usize];
@@ -313,14 +320,14 @@ impl Package {
                 //let vgmarg = vgms_arg.as_str();
                 //println!("{}", vgmarg);
                 let output = Command::new("cmd").arg("/C").arg("res\\vgmstream\\vgmstream-cli.exe").arg("-o").arg(&wav_path).arg(&wem_path).output().expect("Failed to execute vgmstream.");
-                if !output.status.success()
-                {
-                    println!("{}", String::from_utf8_lossy(&output.stderr));
-                }
                 if output.status.success()
                 {
                     println!("{}", String::from_utf8_lossy(&output.stdout));
                     fs::remove_file(wem_path).expect("Failed removing wem file");
+                }
+                else if !output.status.success()
+                {
+                    error!("{}", String::from_utf8_lossy(&output.stderr));
                 }
             }
             });
@@ -357,16 +364,16 @@ impl Package {
     fn decompress_block(&self, block: &structs::Block, decrypt_buffer: &mut Vec<u8>, lib: &libloading::Library) -> Vec<u8>
     {
         unsafe {
-            let mut decomp_buffer = [0u8; 262144 as usize];
-            let OodleLZ_Decompress: libloading::Symbol<extern "C" fn(compressed_bytes: &u8, size_of_compressed_bytes:i64, decompressed_bytes: *mut u8, size_of_decompressed_bytes:i64,
-                a:u32, b:u32, c:u32, d:u32, e:u32, f:u32, g:u32, h:u32, i:u32, threadModule:u32) -> i64> = lib.get(b"OodleLZ_Decompress").expect("Failed to load OodleLZ_Decompress function.");
-            let _result:i64 = OodleLZ_Decompress(&decrypt_buffer[0], block.size as i64, &mut decomp_buffer[0], 262144 as i64, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3);
-            decrypt_buffer.clear();
+            let mut decomp_buffer = [0u8; BLOCK_SIZE as usize];
+            let OodleLZ_Decompress: libloading::Symbol<OodleType> = lib.get(b"OodleLZ_Decompress").expect("Failed to load OodleLZ_Decompress function.");
+            let _result:i64 = OodleLZ_Decompress(&decrypt_buffer[0], block.size as i64, &mut decomp_buffer[0], BLOCK_SIZE as i64, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3);
 
+            decrypt_buffer.clear();
             decomp_buffer.to_vec()
         }
     }
-
+    
+    #[allow(dead_code)]
     pub fn get_entry_reference(&self, hash:String) -> String
     {
         let id:u32 = hex_str_to_u32(hash) % 8192;
@@ -379,12 +386,13 @@ impl Package {
         reader.seek(SeekFrom::Start((entry_table_offset+id*16) as u64)).expect("Error seeking file");
         reader.read_exact(&mut u32buffer).expect("Error reading file");
         let entrya = be_u32(&u32buffer);
-        file.flush();
+        file.flush().expect("Error Flushing File");
 
         u32_to_hex_str(entrya)
     }
-
-    pub fn get_entry_types(&self, hash:String, mut subtype: u8) -> u8
+    
+    #[allow(dead_code)]
+    pub fn get_entry_types(&self, hash:String, mut _subtype: u8) -> u8
     {
         let id:u32 = hex_str_to_u32(hash) % 8192;
         let mut file = File::open(self.package_path.clone()).expect("Error opening file");
@@ -396,14 +404,15 @@ impl Package {
         reader.seek(SeekFrom::Start((entry_table_offset+id*16+4) as u64)).expect("Error seeking file");
         reader.read_exact(&mut u32buffer).expect("Error reading file");
         let entryb = be_u32(&u32buffer);
-        file.flush();
+        file.flush().expect_err("Error Flushing File");
 
         let _type:u8 = ((entryb >> 9) & 0x7F) as u8;
-        subtype = ((entryb >> 6) & 0x7) as u8;
+        _subtype = ((entryb >> 6) & 0x7) as u8;
         _type
     }
-
-    pub fn get_entry_data(&mut self, hash: String, mut file_size: u32) -> Vec<u8>
+    
+    #[allow(dead_code)]
+    pub fn get_entry_data(&mut self, hash: String, mut _file_size: u32) -> Vec<u8>
     {
         let id:u32 = hex_str_to_u32(hash) % 8192;
         if self.header.pkgid == 0
@@ -437,17 +446,18 @@ impl Package {
 
         entry.filesize = (entryd & 0x03FFFFFF) << 4 | (entryc >> 28) & 0xF;
 
-        file_size = entry.filesize.to_owned();
+        _file_size = entry.filesize.to_owned();
 
         let oodle:libloading::Library = unsafe { libloading::Library::new("oo2core_9_win64.dll") }.unwrap();
 
         let buffer:Vec<u8> = self.get_buffer_from_entry(entry, oodle);
-        file.flush();
+        file.flush().expect_err("Error Flushing File");
 
         buffer
         
     }
-
+    
+    #[allow(dead_code)]
     pub fn get_all_files_given_ref(&mut self, reference:String) -> Vec<String>
     {
         let mut hashes = vec![String::new()];
@@ -464,20 +474,21 @@ impl Package {
             {
                 let a:u32 = self.header.pkgid as u32 * 8192;
                 let b:u32 = a + i as u32 + 2155872256; //0x80800000
-                hashes.push(u32_to_hex_str(b));
+                hashes.push(u32_to_hex_str(swap_u32_endianness(b)));
             }
         }   
-
+        hashes.remove(0);
         hashes
     }
-
+    
+    #[allow(unused_assignments)]
     pub fn get_buffer_from_entry(&mut self, entry: structs::Entry, oodle:libloading::Library) -> Vec<u8>
     {
         let mut cipher_ctx = CipherCtx::new().unwrap();
         if entry.filesize == 0 {
             return vec![0u8];
         }
-        let block_count:u32 = libm::floorf((entry.startingblockoffset as f32 + entry.filesize as f32 - 1.0) / 262144 as f32) as u32;
+        let block_count:u32 = libm::floorf((entry.startingblockoffset as f32 + entry.filesize as f32 - 1.0) / BLOCK_SIZE as f32) as u32;
 
         let file = File::open(self.package_path.clone()).expect("Error reading file");
         let mut reader = BufReader::new(file);
@@ -507,8 +518,7 @@ impl Package {
         }
         let mut file_buffer = vec![0u8; entry.filesize as usize];
         let mut current_buffer_offset = 0;
-        let mut current_block_id = 0;
-        for current_block in &self.blocks
+        for (mut current_block_id, current_block) in self.blocks.iter().enumerate()
         {
             let mut b:String = self.package_path.to_string();
             b.remove(b.len()-5);
@@ -524,10 +534,10 @@ impl Package {
                 println!("Error reading file");
             }
             let mut _decrypt_buffer:Vec<u8> = vec![0u8; current_block.size as usize];
-            let mut _decomp_buffer:Vec<u8> = vec![0u8; 262144 as usize];
+            let mut _decomp_buffer:Vec<u8> = vec![0u8; BLOCK_SIZE as usize];
             if current_block.bitflag & 0x2 != 0
             {
-                _decrypt_buffer = self.decrypt_block(&current_block, block_buffer, &mut cipher_ctx);
+                _decrypt_buffer = self.decrypt_block(current_block, block_buffer, &mut cipher_ctx);
             }
             else
             {
@@ -536,7 +546,7 @@ impl Package {
             }
             if current_block.bitflag & 0x1 != 0
             {
-                _decomp_buffer = self.decompress_block(&current_block, &mut _decrypt_buffer, &oodle);
+                _decomp_buffer = self.decompress_block(current_block, &mut _decrypt_buffer, &oodle);
             }
             else
             {
@@ -546,35 +556,37 @@ impl Package {
             {
                 let mut _cpy_size = 0;
 
-                if current_block_id == block_count
+                if current_block_id == block_count as usize
                 {
                     _cpy_size = entry.filesize;
                 }
                 else
                 {
-                    _cpy_size = 262144 - entry.startingblockoffset;
+                    _cpy_size = BLOCK_SIZE - entry.startingblockoffset;
                 }
                 file_buffer[0.._cpy_size as usize].copy_from_slice(&_decomp_buffer[entry.startingblockoffset as usize..entry.startingblockoffset as usize + _cpy_size as usize]);
 
                 current_buffer_offset += _cpy_size as usize;
             }
-            else if current_block_id == block_count
+            else if current_block_id == block_count as usize
             {
                 file_buffer[current_buffer_offset as usize..]
                 .copy_from_slice(&_decomp_buffer[..(entry.filesize - current_buffer_offset as u32) as usize]);
             }
             else
             {
-                file_buffer[current_buffer_offset as usize..(current_buffer_offset + 262144 as usize) as usize].copy_from_slice(&_decomp_buffer[0..BLOCK_SIZE as usize]);
-                current_buffer_offset += 262144 as usize;
+                file_buffer[current_buffer_offset as usize..(current_buffer_offset + BLOCK_SIZE as usize) as usize].copy_from_slice(&_decomp_buffer[0..BLOCK_SIZE as usize]);
+                current_buffer_offset += BLOCK_SIZE as usize;
             }
             reader.seek(SeekFrom::Start(0)).expect("Error seeking");
             current_block_id +=1;
             _decomp_buffer.clear();
         }
         self.blocks.clear();
-        return file_buffer;
+
+        file_buffer
     }
+    
 }
 
 pub fn get_latest_patch_id_path(packages_path: &str, package_id: &str) -> String
@@ -599,6 +611,39 @@ pub fn get_latest_patch_id_path(packages_path: &str, package_id: &str) -> String
                 package_name = package_name[pos.unwrap()..].to_string();
                 package_name = package_name[..val].to_string();
             }
+        }
+    }
+    if latest_patch_id == u16::MIN
+    {
+        for entry in std::fs::read_dir(packages_path).unwrap()
+        {
+            let mut u16_buf = [0u8; 2];
+            let entry = entry.unwrap();
+            let path:String = entry.path().display().to_string();
+            let mut patch_pkg = File::open(path.clone()).expect("Error reading file");
+            let mut reader = BufReader::new(&patch_pkg);
+            if patch_pkg.metadata().unwrap().len() < 1024 { println!("File is less than 1024 bytes."); continue; }
+            reader.seek(SeekFrom::Start(0x10)).expect("Error seeking");
+            reader.read_exact(&mut u16_buf).expect("Error reading");
+            let pkg_id = le_u16(&u16_buf);
+            if package_id.to_uppercase() == u16_to_hex_str(pkg_id).to_uppercase()
+            {
+                reader.seek(SeekFrom::Start(0x30)).expect("Error seeking");
+                reader.read_exact(&mut u16_buf).expect("Error reading");
+                let patch_id = le_u16(&u16_buf);
+                if patch_id > latest_patch_id
+                {
+                    latest_patch_id = patch_id;
+                }
+                let path2 = path.replace('\\', "/");
+                pa = path2.clone().to_owned();
+                package_name = pa.to_string()[0..pa.to_string().len()-6].to_string();
+                let pos = package_name.rfind('/');
+                let val = package_name.len()-pos.unwrap();
+                package_name = package_name[pos.unwrap()..].to_string();
+                package_name = package_name[..val].to_string();
+            }
+            patch_pkg.flush().expect("Error fushing file");
         }
     }
     println!("{packages_path}/{package_name}_{latest_patch_id}.pkg");

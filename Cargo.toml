@@ -12,10 +12,15 @@ libloading = "0.7" # oodle decompression
 openssl = "0.10.40" # AES-128-GCM decryption
 getopts = "0.2" # CLI arg parsing
 libc = "0.2" # c_void in vgmstream
+color-eyre = "0.2.0" # error formatting
+tracing = "0.1.0" # error tracing
 
+#tokio = { version = "1.19.2", features = ["full"] }
+#futures = { version = "0.3.21", features = ["thread-pool"] }
 
 [profile.dev]
-opt-level = 1
+opt-level = 0
+debug = true
 
 [profile.release]
 panic = "abort"

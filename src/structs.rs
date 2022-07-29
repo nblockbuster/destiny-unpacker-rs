@@ -35,6 +35,7 @@ pub struct ExtrOpts {
     pub hexid:bool,
     pub skip_non_audio:bool,
     pub wavconv:bool,
+    pub music_only:bool,
     pub oodle:libloading::Library,
     pub output_path:String
 }
@@ -101,6 +102,7 @@ impl ExtrOpts {
             hexid: false,
             skip_non_audio: true,
             wavconv: false,
+            music_only: false,
             oodle: unsafe { libloading::Library::new("oo2core_9_win64.dll") }.unwrap(),
             output_path: String::new(),
         }
