@@ -11,8 +11,9 @@ libm = "0.2" # floor for block count
 libloading = "0.7" # oodle decompression
 openssl = "0.10" # AES-128-GCM decryption
 getopts = "0.2" # CLI arg parsing
-libc = "0.2" # c_void in vgmstream
 tracing = "0.1" # error tracing
+
+d2_package_lib = { path = "../package" }
 
 #egui = "0.18" # GUI
 #tokio = { version = "1.19.2", features = ["full"] }

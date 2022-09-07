@@ -1,5 +1,4 @@
-mod package;
-use package::Package;
+use d2_package_lib::Package;
 extern crate getopts;
 use getopts::Options;
 use std::{env};//, collections::HashSet, io::prelude::*};
@@ -55,7 +54,7 @@ fn main()
        _output_path_base = format!("{}/output/", env::current_dir().unwrap().display());
     }
     
-    let mut extr_opts:package::structs::ExtrOpts = package::structs::ExtrOpts::new();
+    let mut extr_opts:d2_package_lib::structs::ExtrOpts = d2_package_lib::structs::ExtrOpts::new();
     extr_opts.output_path = _output_path_base;
     extr_opts.skip_non_audio = true;
 
