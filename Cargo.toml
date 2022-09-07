@@ -7,14 +7,14 @@ edition = "2021"
 
 [dependencies]
 
-libm = "0.2.2" # floor for block count
+libm = "0.2" # floor for block count
 libloading = "0.7" # oodle decompression
-openssl = "0.10.40" # AES-128-GCM decryption
+openssl = "0.10" # AES-128-GCM decryption
 getopts = "0.2" # CLI arg parsing
 libc = "0.2" # c_void in vgmstream
-color-eyre = "0.2.0" # error formatting
-tracing = "0.1.0" # error tracing
+tracing = "0.1" # error tracing
 
+#egui = "0.18" # GUI
 #tokio = { version = "1.19.2", features = ["full"] }
 #futures = { version = "0.3.21", features = ["thread-pool"] }
 

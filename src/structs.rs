@@ -41,8 +41,8 @@ pub struct ExtrOpts {
 }
 
 impl Header {
-    pub fn new() -> Header {
-        Header {
+    pub fn new() -> Self {
+        Self {
             pkgid: 0,
             patchid: 0,
             entry_table_offset: 0,
@@ -61,8 +61,8 @@ impl Default for Header {
 }
 
 impl Entry {
-    pub fn new() -> Entry {
-        Entry {
+    pub fn new() -> Self {
+        Self {
             reference: String::new() ,
             numtype: 0,
             numsubtype: 0,
@@ -79,8 +79,8 @@ impl Default for Entry {
 }
 
 impl Block {
-    pub fn new() -> Block {
-        Block {
+    pub fn new() -> Self {
+        Self {
             id: 0,
             offset: 0,
             size: 0,
@@ -97,8 +97,8 @@ impl Default for Block {
 }
 
 impl ExtrOpts {
-    pub fn new() -> ExtrOpts {
-        ExtrOpts {
+    pub fn new() -> Self {
+        Self {
             hexid: false,
             skip_non_audio: true,
             wavconv: false,

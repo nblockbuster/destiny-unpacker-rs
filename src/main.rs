@@ -1,5 +1,5 @@
 mod package;
-use package::*;
+use package::Package;
 extern crate getopts;
 use getopts::Options;
 use std::{env};//, collections::HashSet, io::prelude::*};
@@ -10,7 +10,7 @@ fn print_usage(program: &str, opts: Options) {
 }
 
 fn main()
-{   
+{
     let args: Vec<String> = env::args().collect();
     let program = args[0].clone();
     let mut opts = Options::new();
